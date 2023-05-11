@@ -1,0 +1,82 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+
+#define MAX_RPEAKS 2048
+
+char* ecg_quality_zhao2018(float* ecg_data, int ecg_len, int* rpeaks, int rpeaks_len, int sampling_rate) {
+    if (rpeaks == NULL) {
+        rpeaks = (int*)malloc(MAX_RPEAKS * sizeof(int));
+        int n_rpeaks = 0;
+        for (int i = 1; i < ecg_len - 1; i++) {
+            if (ecg_data[i] > ecg_data[i - 1] && ecg_data[i] > ecg_data[i + 1]) {
+                rpeaks[n_rpeaks++] = i;
+            }
+        }
+        rpeaks_len = n_rpeaks;
+    }
+
+    // Calculate quality indices
+    float mean = 0;
+    for (int i = 0; i < ecg_len; i++) {
+        mean += ecg_data[i];
+    }
+    mean /= ecg_len;
+
+    float kurtosis = 0;
+    for (int i = 0; i < ecg_len; i++) {
+        float deviation = ecg_data[i] - mean;
+        kurtosis += pow(deviation, 4);
+    }
+    kurtosis /= ecg_len;
+    kurtosis /= pow(mean, 4);
+
+    float pSQI = 0;
+    for (int i = 0; i < ecg_len; i++) {
+        pSQI += pow(ecg_data[i], 2);
+    }
+    pSQI /= ecg_len;
+
+    float max_val = ecg_data[0];
+    for (int i = 1; i < ecg_len; i++) {
+        if (ecg_data[i] > max_val) {
+            max_val = ecg_data[i];
+        }
+    }
+    float basSQI = max_val / mean;
+
+    // Classify quality indices
+    float ecg_rate = 60000.0 / (1000.0 / sampling_rate * (rpeaks_len > 1 ? rpeaks[1] - rpeaks[0] : 1));
+    int pSQI_class = 0;
+    if ((pSQI > 0.5 && ecg_rate < 130) || (pSQI > 0.8 && ecg_rate >= 130)) {
+        pSQI_class = 2;
+    } else if (0.4 < pSQI && pSQI < 0.5 || 0.3 < pSQI && pSQI < 0.4) {
+        pSQI_class = 1;
+    }
+    int kSQI_class = kurtosis > 5 ? 2 : 0;
+    int basSQI_class = basSQI >= 0.95 ? 2 : (0.9 <= basSQI && basSQI < 0.95 ? 1 : 0);
+
+    // Calculate final classification
+    int class_matrix[3] = {pSQI_class, kSQI_class, basSQI_class};
+    int n_optimal = 0, n_suspicious = 0, n_unqualified = 0;
+    for (int i = 0; i < 3; i++) {
+        if (class_matrix[i] == 2) {
+            n_optimal++;
+        } else if (class_matrix[i] == 1) {
+            n_suspicious++;
+        } else {
+            n_unqualified++
+        }
+    }
+    char* result;
+    if (n_unqualified >= 2 || (n_unqualified == 1 && n_suspicious == 2))
+    {
+        result = "Unacceptable";
+    }
+    else if (n_optimal >= 2 && n_unqualified == 0)
+    {
+        result = "Excellent";
+        }
+    else{
+        result = "Barely acceptable";
+    }
