@@ -1,0 +1,137 @@
+#include <stdio.h>
+#include <math.h>
+#include <fftw3.h>
+
+// 使用了fftw库来计算功率谱密度，需要安装和链接该库。
+
+double calculate_sqikur(double ecg_signal[], int length) {
+    double mean = 0;
+    for (int i = 0; i < length; i++) {
+        mean += ecg_signal[i];
+    }
+    mean /= length;
+
+    double std = 0;
+    for (int i = 0; i < length; i++) {
+        std += pow(ecg_signal[i] - mean, 2);
+    }
+    std = sqrt(std / length);
+
+    double sqikur = 0;
+    for (int i = 0; i < length; i++) {
+        sqikur += pow((ecg_signal[i] - mean) / std, 4);
+    }
+    sqikur /= length;
+
+    return sqikur;
+}
+
+double calculate_sqisnr(double ecg_signal[], int length) {
+    double signal_variance = 0;
+    for (int i = 0; i < length; i++) {
+        signal_variance += pow(ecg_signal[i], 2);
+    }
+    signal_variance /= length;
+
+    double absolute_signal[length];
+    for (int i = 0; i < length; i++) {
+        absolute_signal[i] = fabs(ecg_signal[i]);
+    }
+
+    double noise_variance = 0;
+    for (int i = 0; i < length; i++) {
+        noise_variance += pow(absolute_signal[i], 2);
+    }
+    noise_variance /= length;
+
+    double sqisnr = signal_variance / noise_variance;
+
+    return sqisnr;
+}
+
+double calculate_sqihos(double ecg_signal[], int length) {
+    double mean = 0;
+    for (int i = 0; i < length; i++) {
+        mean += ecg_signal[i];
+    }
+    mean /= length;
+
+    double std = 0;
+    for (int i = 0; i < length; i++) {
+        std += pow(ecg_signal[i] - mean, 2);
+    }
+    std = sqrt(std / length);
+
+    double sqiskew = 0;
+    for (int i = 0; i < length; i++) {
+        sqiskew += pow((ecg_signal[i] - mean) / std, 3);
+    }
+    sqiskew /= length;
+
+    double sqikur = calculate_sqikur(ecg_signal, length);
+
+    double sqihos = fabs(sqiskew) * (sqikur / 5);
+
+    return sqihos;
+}
+
+double calculate_sqi_p(double ecg_signal[], int length, double fs) {
+    fftw_complex *fft_result;
+    double *power_spectrum;
+    fftw_plan plan;
+
+    int n = length;
+    fft_result = (fftw_complex *)fftw_malloc(sizeof(fftw_complex) * n);
+    power_spectrum = (double *)malloc(sizeof(double) * (n / 2 + 1));
+
+    plan = fftw_plan_dft_r2c_1d(n, ecg_signal, fft_result, FFTW_ESTIMATE);
+    fftw_execute(plan);
+
+    for (int i = 0; i <= n / 2; i++) {
+        power_spectrum[i] = pow(fft_result[i][0], 2) + pow(fft_result[i][1], 2);
+    }
+
+    double frequency_step = fs / n;
+    double qrs_power_sum = 0;
+
+    for (int i = round(5 / frequency_step); i <= round(15 / frequency_step); i++) {
+        qrs_power_sum += power_spectrum[i];
+    }
+
+    double total_power = 0;
+    for (int i = 0; i <= n / 2; i++) {
+        total_power += power_spectrum[i];
+    }
+
+    double sqi_p = qrs_power_sum / total_power;
+
+    fftw_destroy_plan(plan);
+    fftw_free(fft_result);
+    free(power_spectrum);
+
+    return sqi_p;
+}
+
+int main() {
+    double ecg_signal[] = {1, 2, 3, 4, 5};  // Replace with your actual ECG signal
+    int length = sizeof(ecg_signal) / sizeof(ecg_signal[0]);
+
+    double fs = 500;  // Replace with the sampling rate of your ECG signal
+
+    double sqikur = calculate_sqikur(ecg_signal, length);
+    double sqisnr = calculate_sqisnr(ecg_signal, length);
+    double sqihos = calculate_sqihos(ecg_signal, length);
+    double sqi_p = calculate_sqi_p(ecg_signal, length, fs);
+
+    char* quality;
+
+    if (0.5 < sqi_p && sqi_p < 0.8 && -0.8 < sqihos && sqihos <= 0.8 && sqisnr > 10 && sqikur > 5) {
+        quality = "Good";
+    } else {
+        quality = "Poor";
+    }
+
+    printf("ECG Quality: %s\n", quality);
+
+    return 0;
+}

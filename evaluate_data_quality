@@ -1,0 +1,42 @@
+#include <stdio.h>
+#include <math.h>
+
+// 定义函数来判断心电数据的质量或无效性
+char* evaluate_data_quality(float* ecg_data, int data_length) {
+    // 计算均值和标准差
+    float mean = 0.0;
+    float variance = 0.0;
+    for (int i = 0; i < data_length; i++) {
+        mean += ecg_data[i];
+    }
+    mean /= data_length;
+
+    for (int i = 0; i < data_length; i++) {
+        variance += pow(ecg_data[i] - mean, 2);
+    }
+    variance /= data_length;
+    float std_deviation = sqrt(variance);
+
+    // 定义阈值规则来判断数据质量
+    // 以下是一个示例规则：如果标准差过大，则判断为低质量或无效数据
+    if (std_deviation > 0.1) {
+        return "Low quality or invalid data";
+    }
+
+    // 如果不满足上述规则，则判断为高质量数据
+    return "High quality data";
+}
+
+int main() {
+    // 假设你有一个2秒的心电数据序列，存储在名为ecg_data的数组中
+    float ecg_data[] = {0.1, 0.2, 0.3, ...};  // 这里仅为示例数据，实际使用时需要替换为真实的心电数据
+    int data_length = sizeof(ecg_data) / sizeof(ecg_data[0]);
+
+    // 调用函数进行数据质量判断
+    char* result = evaluate_data_quality(ecg_data, data_length);
+
+    // 打印结果
+    printf("Data quality evaluation result: %s\n", result);
+
+    return 0;
+}
